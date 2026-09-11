@@ -48,6 +48,14 @@ export function createInitialState(): LabState {
     runs: [],
     methods: seedMethods,
     cylinders: seedCylinders,
+    exposureSessions: [],
+    subSamples: [],
+    funnel: {
+      lastProductName: null,
+      lastSampleRef: null,
+      lastUsedAt: null,
+      cleanedSinceLastUse: true,
+    },
     wizard: {
       step: 'sample',
       kind: 'bulk',
@@ -55,6 +63,7 @@ export function createInitialState(): LabState {
       methodId: SEED_METHOD_ID,
       cylinderId: 'cyl-100',
       draft: null,
+      provenance: null,
       uiError: null,
     },
   };
@@ -73,6 +82,20 @@ export async function loadState(): Promise<LabState> {
       for (const m of seedMethods) if (!methodIds.has(m.id)) saved.methods.push(m);
       const cylIds = new Set(saved.cylinders.map((c) => c.id));
       for (const c of seedCylinders) if (!cylIds.has(c.id)) saved.cylinders.push(c);
+      // 兼容旧版本本机数据：补齐高湿暴露分支与漏斗清洁状态字段
+      if (!Array.isArray(saved.exposureSessions)) saved.exposureSessions = [];
+      if (!Array.isArray(saved.subSamples)) saved.subSamples = [];
+      if (!saved.funnel) {
+        saved.funnel = {
+          lastProductName: null,
+          lastSampleRef: null,
+          lastUsedAt: null,
+          cleanedSinceLastUse: true,
+        };
+      }
+      if (saved.wizard && saved.wizard.provenance === undefined) {
+        saved.wizard.provenance = null;
+      }
       return saved;
     }
   } catch (e) {

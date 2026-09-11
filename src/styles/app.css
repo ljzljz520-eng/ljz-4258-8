@@ -217,3 +217,37 @@ code { background: #f1f4f7; padding: 1px 5px; border-radius: 4px; font-size: 11.
   color: var(--muted); font-size: 11.5px; border-top: 1px solid var(--line); padding-top: 10px;
 }
 .boot { padding: 48px; text-align: center; color: var(--muted); }
+
+/* ===== 短时高湿暴露分支 ===== */
+.scope-banner {
+  background: #eef4f8; border: 1px solid #cfe0ea; color: #284b5f;
+  padding: 8px 12px; border-radius: 8px; margin-bottom: 12px; font-size: 12.5px;
+}
+.banner.exposure-banner {
+  background: #eef6f1; border: 1px solid #c4e2d2; color: #1d5b40;
+  padding: 7px 11px; border-radius: 8px; margin: 8px 0; font-size: 12px;
+}
+.banner.exposure-banner code { background: #dff0e7; }
+.exposure.invalid-card { border-color: #efc3bf; background: #fffafa; }
+.exp-head { margin-bottom: 6px; }
+.exp-head .tag { margin-left: 8px; }
+.tag.warn { background: #fdf3dc; color: var(--warn); }
+.tag.exposed { background: #e6f0f8; color: var(--brand); border: 1px solid #c2d9ea; }
+.exp-sub { border-top: 1px dashed #e0e5ea; margin-top: 10px; padding-top: 6px; }
+.point-list, .sub-list { list-style: none; padding: 0; margin: 8px 0; }
+.point-list li { font-size: 12px; padding: 3px 0; border-bottom: 1px dotted #eef1f4; font-variant-numeric: tabular-nums; }
+.sub-list li { padding: 6px 0; border-bottom: 1px dashed #e4e8ec; font-size: 12.5px; }
+.sub-list .btn-row { margin-top: 4px; display: flex; gap: 6px; }
+.funnel-bar {
+  border: 1px solid #c6ced7; border-radius: 8px; padding: 8px 11px; margin: 8px 0;
+  display: flex; flex-direction: column; gap: 2px; background: #f7fafc;
+}
+.funnel-bar.dirty { border-color: #e2b6b2; background: #fdf6f5; }
+.funnel-bar.clean { border-color: #bfe2cc; background: #f4faf6; }
+.funnel-bar .check { margin: 2px 0; }
+.exposure-grid { margin-top: 6px; }
+.scenario-btn.exposure-btn { border-color: #bcd4e4; background: #f6fafd; }
+.scenario-btn.exposure-btn:hover { border-color: var(--brand-2); }
+.scenario-btn.exposure-btn strong { color: var(--brand); }
+.rec-table tr.exposed-row td { background: #f5f9fc; }
+.exp-invalid { color: var(--err); }

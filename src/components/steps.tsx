@@ -12,6 +12,7 @@ import {
   type Conditioning,
   type Draft,
   type FillMode,
+  type RunProvenance,
 } from '../domain/types';
 import { LabStoreContext, previewBulk } from '../state/store';
 import { DeviceContext } from './context';
@@ -30,9 +31,81 @@ function num(el: EventTarget | null): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+function provenanceRow(p: RunProvenance | null) {
+  if (!p) return null;
+  return (
+    <tr>
+      <th>测次来源</th>
+      <td>
+        <span class="tag exposed">高湿暴露后子样</span> 子样编号{' '}
+        <strong>{p.subCode}</strong>（会话 {p.exposureSessionId?.slice(-6)}）
+        <small>结果单独成组留档，不回写/不并入原样</small>
+      </td>
+    </tr>
+  );
+}
+
 export function exposureOf(iso: string, at = new Date()): number {
   return Math.round(((at.getTime() - Date.parse(iso)) / 60000) * 10) / 10;
 }
+
+/** 高湿暴露分支：当前向导正在测的“暴露后独立子样”溯源条 */
+export const ProvenanceBanner = component$(() => {
+  const store = useContext(LabStoreContext);
+  const p = store.state.wizard.provenance;
+  if (!p) return null;
+  const sub = p.subSampleId
+    ? store.state.subSamples.find((x) => x.id === p.subSampleId)
+    : null;
+  return (
+    <div class="banner exposure-banner" role="status">
+      <strong>高湿暴露后子样试验</strong>
+      <span>
+        {' '}
+        子样 <code>{p.subCode ?? sub?.subCode ?? '—'}</code>
+        （质量 {sub?.massG?.toFixed(2) ?? '—'} g）取自暴露会话{' '}
+        <code>{p.exposureSessionId?.slice(-6)}</code>
+        ；结果单独成组留档，<strong>不会回写或并入原样</strong>，不套用开封 10 min 暴露时限。
+      </span>
+    </div>
+  );
+});
+
+/** 标准漏斗清洁确认（防止两种奶粉共用未清洁漏斗） */
+export const FunnelCleanBar = component$(() => {
+  const store = useContext(LabStoreContext);
+  const f = store.state.funnel;
+  const dirty = f.lastProductName != null && !f.cleanedSinceLastUse;
+  return (
+    <div class={dirty ? 'funnel-bar dirty' : 'funnel-bar clean'}>
+      <div>
+        <strong>标准漏斗清洁核对</strong>
+        {f.lastProductName ? (
+          <div class="small">
+            上次用于：{f.lastProductName}（{f.lastSampleRef}）· {fmtDt(f.lastUsedAt)}
+          </div>
+        ) : (
+          <div class="small muted">本会话尚无流动使用记录</div>
+        )}
+      </div>
+      <label class="check">
+        <input
+          type="checkbox"
+          checked={f.cleanedSinceLastUse}
+          onChange$={(e) =>
+            store.setFunnelCleaned((e.target as HTMLInputElement).checked)
+          }
+        />
+        已按 SOP 清洁并干燥漏斗
+      </label>
+      {dirty && (
+        <p class="inline-err">
+          未清洁确认：若与上一样品/产品不同，装粉将判 FUNNEL_NOT_CLEANED（交叉污染）。
+        </p>
+      )}
+    </div>
+  );
+});
 
 function useTickExposure(startIso: string | null): Signal<number | null> {
   const value = useSignal<number | null>(startIso ? exposureOf(startIso) : null);
@@ -221,18 +294,27 @@ export const StepFill = component$(() => {
   const cyl = state.cylinders.find((c) => c.id === state.wizard.cylinderId);
   const fillMode = useSignal<FillMode>('free_pour');
   if (!method || !cyl) return <p class="muted">方法/量筒缺失</p>;
+  const provenance = state.wizard.provenance;
+  const sub = provenance?.subSampleId
+    ? state.subSamples.find((x) => x.id === provenance.subSampleId)
+    : null;
 
   return (
     <div class="grid two">
       <section class="card">
         <h3>装粉前核对</h3>
+        <ProvenanceBanner />
         <CheckList
           items={[
             '生产样编号、批号与开封时间已核对（见右侧样品信息）',
             state.wizard.kind === 'bulk'
               ? `量筒已选：${cyl.name}，分度 ${cyl.graduationMl} mL，台账皮重 ${cyl.listedTareG} g`
               : `标准漏斗装粉量 ${method.flowChargeG} g`,
-            `调湿状态与方法一致；分装时刻起算暴露计时（限值 ${method.maxExposureMin} min）`,
+            provenance
+              ? `暴露后独立子样 ${provenance.subCode}（${sub?.massG ?? '—'} g）：质量须≥${
+                  state.wizard.kind === 'bulk' ? '50 g（松装/振实）' : '100 g（流动）'
+                }，结果不回写原样`
+              : `调湿状态与方法一致；分装时刻起算暴露计时（限值 ${method.maxExposureMin} min）`,
             `振实目标 ${method.tapTarget} 次，计数中断即按方法判废`,
             '每次装粉都分装一份新 aliquot；该 aliquot 振实后不得再作为初始松装样',
           ]}
@@ -308,6 +390,7 @@ export const StepLoose = component$(() => {
     <div class="grid two">
       <section class="card">
         <h3>初始松装读数 V0（未经任何振实）</h3>
+        <ProvenanceBanner />
         <div class="read-row">
           <label>
             空筒皮重 m0 (g)
@@ -334,6 +417,18 @@ export const StepLoose = component$(() => {
           </button>
         </div>
         <p class="muted small">台账皮重 {cyl.listedTareG} g（实测差 &gt;0.5 g 复核判废）</p>
+
+        {state.wizard.provenance && (
+          <label>
+            暴露子样 aliquot 称取质量 (g)（松装/振实最小 50 g）
+            <input
+              type="number"
+              step="0.1"
+              value={d.aliquotMassG ?? ''}
+              onInput$={(e) => store.setBulkField('aliquotMassG', num(e.target))}
+            />
+          </label>
+        )}
 
         <div class="read-row">
           <label>
@@ -462,6 +557,7 @@ export const StepTap = component$(() => {
     <div class="grid two">
       <section class="card">
         <h3>振实计数与 Vt 读数</h3>
+        <ProvenanceBanner />
         <div class="counter-box">
           <div class="counter-num">
             {d.tapCount}
@@ -601,6 +697,8 @@ export const StepFlow = component$(() => {
     <div class="grid two">
       <section class="card">
         <h3>{`漏斗流动时间（标准装粉 ${method.flowChargeG} g）`}</h3>
+        <ProvenanceBanner />
+        <FunnelCleanBar />
         <div class="read-row">
           <label>
             装粉量 (g)
@@ -755,9 +853,12 @@ export const StepReview = component$(() => {
     <div class="grid two">
       <section class="card">
         <h3>读数复核（按已批准方法 {method.code} {method.version}）</h3>
+        <ProvenanceBanner />
         <SampleInfo compact />
         <table class="review-table">
           <tbody>
+            {d.kind === 'bulk' && provenanceRow(state.wizard.provenance)}
+            {d.kind === 'flow' && provenanceRow(state.wizard.provenance)}
             {d.kind === 'bulk' && (
               <>
                 <tr>

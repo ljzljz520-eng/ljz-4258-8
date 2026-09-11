@@ -5,23 +5,69 @@ import type {
   Issue,
   MethodVersion,
 } from './types';
+import {
+  EXPOSURE_RULES,
+  type SubSampleIssue,
+} from './exposure';
 
 /**
  * 读数复核：在实验员“确认”结团/架桥/洒失/有效测次之后，
  * 依据已批准方法计算或判废。error 存在时不得保存为有效测次（记录仍可留档标记无效）。
  */
 
+/** 高湿暴露后子样测次：核对 aliquot 称取质量是否满足最小装样量（子样质量不足） */
+function subSampleMassIssue(
+  provenance: { exposureSessionId?: string } | undefined,
+  kind: 'bulk' | 'flow',
+  massG: number | null,
+): Issue | null {
+  if (!provenance?.exposureSessionId) return null;
+  const min =
+    kind === 'bulk'
+      ? EXPOSURE_RULES.minBulkAliquotMassG
+      : EXPOSURE_RULES.minFlowAliquotMassG;
+  if (massG == null) {
+    return {
+      level: 'error',
+      code: 'SUBSAMPLE_MASS_MISSING',
+      message: `暴露后子样未称取 aliquot 质量（${kind === 'bulk' ? '松装/振实' : '漏斗流动'}最小 ${min} g）。`,
+    };
+  }
+  if (!(massG > 0) || massG < min) {
+    return {
+      level: 'error',
+      code: 'SUBSAMPLE_MASS_SHORT',
+      message: `暴露后独立子样 aliquot 质量 ${massG?.toFixed(2)} g 不足${
+        kind === 'bulk' ? '松装/振实' : '漏斗流动'
+      }最小装样量 ${min} g：本次物性试验判废，请从暴露盘重新称取足量独立子样，禁止回掺原样或与原样结果合并。`,
+    };
+  }
+  return null;
+}
+
+export interface RunValidationContext {
+  /** 非空=高湿暴露后独立子样测次（用于子样质量不足判废） */
+  provenance?: { exposureSessionId?: string };
+  /** 流动试验前的漏斗清洁核对结果（两种奶粉共用未清洁漏斗判废） */
+  funnelIssues?: SubSampleIssue[];
+}
+
 export function validateBulk(
   method: MethodVersion,
   cylinder: Cylinder,
   d: BulkDraft,
   exposureMin?: number | null,
+  ctx: RunValidationContext = {},
 ): Issue[] {
   const issues: Issue[] = [];
   const err = (code: string, message: string) =>
     issues.push({ level: 'error', code, message });
   const warn = (code: string, message: string) =>
     issues.push({ level: 'warning', code, message });
+
+  // 高湿暴露后子样：质量不足直接判废（不得用暴露后结果回写原样）
+  const subMass = subSampleMassIssue(ctx.provenance, 'bulk', d.aliquotMassG);
+  if (subMass) issues.push(subMass);
 
   if (d.tareMassG == null) err('TARE_MISSING', '缺少量筒皮重读数，需先称空筒皮重。');
   if (d.grossMassG == null) err('GROSS_MISSING', '缺少量筒+粉毛重读数。');
@@ -118,14 +164,16 @@ export function validateBulk(
   if (d.flags.bridging) err('BRIDGING_BULK', '量筒内架桥/成拱：松装体积不具代表性，判废。');
   if (d.flags.spillage) err('SPILLAGE', '确认发生洒失：质量与体积不对应，判废。');
 
-  // 测试点：等待期间吸湿
-  if (exposureMin != null && exposureMin > method.maxExposureMin) {
-    err(
-      'MOISTURE_EXPOSURE',
-      `开封暴露 ${exposureMin.toFixed(1)} min 超过方法限值 ${method.maxExposureMin} min，存在吸湿影响，判废并密封换样。`,
-    );
-  } else if (d.flags.moistureAbsorbed) {
-    warn('MOISTURE_CONFIRMED', '实验员标记等待期间吸湿：即使未超时限也建议换样。');
+  // 测试点：等待期间吸湿（仅原样常规试验；高湿暴露子样本身就是暴露后取样，按暴露会话复核，不再套用开封时限）
+  if (!ctx.provenance?.exposureSessionId) {
+    if (exposureMin != null && exposureMin > method.maxExposureMin) {
+      err(
+        'MOISTURE_EXPOSURE',
+        `开封暴露 ${exposureMin.toFixed(1)} min 超过方法限值 ${method.maxExposureMin} min，存在吸湿影响，判废并密封换样。`,
+      );
+    } else if (d.flags.moistureAbsorbed) {
+      warn('MOISTURE_CONFIRMED', '实验员标记等待期间吸湿：即使未超时限也建议换样。');
+    }
   }
 
   if (d.flags.acceptedReplicate && issues.some((i) => i.level === 'error')) {
@@ -142,12 +190,20 @@ export function validateFlow(
   method: MethodVersion,
   d: FlowDraft,
   exposureMin?: number | null,
+  ctx: RunValidationContext = {},
 ): Issue[] {
   const issues: Issue[] = [];
   const err = (code: string, message: string) =>
     issues.push({ level: 'error', code, message });
   const warn = (code: string, message: string) =>
     issues.push({ level: 'warning', code, message });
+
+  // 高湿暴露后子样：质量不足判废
+  const subMass = subSampleMassIssue(ctx.provenance, 'flow', d.aliquotMassG);
+  if (subMass) issues.push(subMass);
+
+  // 两种奶粉共用未清洁漏斗：流动试验开始前核对，未清洁判废
+  for (const f of ctx.funnelIssues ?? []) issues.push(f);
 
   if (d.chargeMassG == null) err('CHARGE_MISSING', '缺少漏斗装粉量读数。');
   else if (d.chargeMassG <= 0) err('CHARGE_INVALID', '装粉量必须为正。');
@@ -188,15 +244,17 @@ export function validateFlow(
   if (d.flags.bridging) err('BRIDGING_FLOW', '漏斗内架桥/成拱：流动被阻断，判废。');
   if (d.flags.spillage) err('SPILLAGE_FLOW', '确认洒失：装粉量不真实，判废。');
 
-  if (exposureMin != null && exposureMin > method.maxExposureMin) {
-    err(
-      'MOISTURE_EXPOSURE_FLOW',
-      `等待暴露 ${exposureMin.toFixed(1)} min 超过方法限值 ${method.maxExposureMin} min，吸湿可能改变流动性，判废。`,
-    );
-  } else if (d.flags.moistureAbsorbed) {
-    warn('MOISTURE_CONFIRMED_FLOW', '实验员标记等待期间吸湿，建议密封换样。');
+  // 等待期间吸湿（仅原样常规试验；暴露后子样按暴露会话复核，不套用开封时限）
+  if (!ctx.provenance?.exposureSessionId) {
+    if (exposureMin != null && exposureMin > method.maxExposureMin) {
+      err(
+        'MOISTURE_EXPOSURE_FLOW',
+        `等待暴露 ${exposureMin.toFixed(1)} min 超过方法限值 ${method.maxExposureMin} min，吸湿可能改变流动性，判废。`,
+      );
+    } else if (d.flags.moistureAbsorbed) {
+      warn('MOISTURE_CONFIRMED_FLOW', '实验员标记等待期间吸湿，建议密封换样。');
+    }
   }
-
   if (d.flags.acceptedReplicate && issues.some((i) => i.level === 'error')) {
     warn(
       'ACCEPTED_WITH_ERROR_FLOW',

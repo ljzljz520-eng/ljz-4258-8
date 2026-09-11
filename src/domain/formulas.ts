@@ -90,18 +90,33 @@ export interface RunSummary {
   meanTappedDensity: number | null;
   validFlow: number;
   meanFlowTimeS: number | null;
+  /** 高湿暴露后独立子样的有效测次（单独成组，不并入原样均值） */
+  exposedValidBulk: number;
+  exposedValidFlow: number;
 }
 
-/** 按有效测次汇总；有效判定由复核层给出（这里只收 acceptedReplicate 的记录） */
+/** 该测次是否属于高湿暴露后的独立子样（禁止与原样结果合并/回写） */
+export function isExposedRun(r: Run): boolean {
+  return !!r.provenance?.exposureSessionId;
+}
+
+/**
+ * 按有效测次汇总；有效判定由复核层给出（这里只收 acceptedReplicate 的记录）。
+ * 原样常规测次与高湿暴露后子样测次分组汇总：暴露后结果绝不并入原样均值。
+ */
 export function summarizeRuns(runs: Run[], isValid: (r: Run) => boolean): RunSummary {
-  const bulk = runs.filter((r) => r.kind === 'bulk' && isValid(r)) as Extract<
-    Run,
-    { kind: 'bulk' }
-  >[];
-  const flow = runs.filter((r) => r.kind === 'flow' && isValid(r)) as Extract<
-    Run,
-    { kind: 'flow' }
-  >[];
+  const bulk = runs.filter(
+    (r) => r.kind === 'bulk' && isValid(r) && !isExposedRun(r),
+  ) as Extract<Run, { kind: 'bulk' }>[];
+  const flow = runs.filter(
+    (r) => r.kind === 'flow' && isValid(r) && !isExposedRun(r),
+  ) as Extract<Run, { kind: 'flow' }>[];
+  const exposedBulk = runs.filter(
+    (r) => r.kind === 'bulk' && isValid(r) && isExposedRun(r),
+  );
+  const exposedFlow = runs.filter(
+    (r) => r.kind === 'flow' && isValid(r) && isExposedRun(r),
+  );
 
   const bd = bulk
     .map((r) => {
@@ -144,5 +159,7 @@ export function summarizeRuns(runs: Run[], isValid: (r: Run) => boolean): RunSum
     meanTappedDensity: mean(td),
     validFlow: flow.length,
     meanFlowTimeS: meanT(ft),
+    exposedValidBulk: exposedBulk.length,
+    exposedValidFlow: exposedFlow.length,
   };
 }

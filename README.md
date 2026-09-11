@@ -13,7 +13,7 @@ npm run dev        # 开发（http://localhost:5173）
 npm run build      # 纯 CSR 静态产物到 dist/
 npx vite preview   # 注意：Qwik CSR 模式下 preview 会因插件空路径报错；
                    # 直接用静态服务器即可： npx serve dist 或 python3 -m http.server -d dist
-npm run test       # 27 个单元测试（公式/判废场景/串口解析/阶段锁定）
+npm run test       # 47 个单元测试（公式/判废场景/串口解析/阶段锁定/高湿暴露分支）
 npm run typecheck  # tsc --noEmit
 ```
 
@@ -39,9 +39,38 @@ npm run typecheck  # tsc --noEmit
 
 “本机记录”页有 **aliquot 台账**可审计每个分装的阶段。
 
-## 五个异常测试场景
+## 短时高湿暴露分支（独立页签）
 
-顶部“异常场景自检”一键注入演示样并直达复核页，对应判废规则：
+在原样常规流程之外新增**短时高湿敞口暴露**试验分支（顶部第 2 个页签），与原样数据完全隔离：
+
+1. **建暴露会话**：选原样（仅引用，不修改其记录）、样盘编号/皮重、敞口粉层总质量、**敞口开始时刻**、**样层初始厚度**、**湿度记录器启动时刻**。
+2. **暴露中**：逐笔录入**环境曲线**（%RH/℃）；需要时登记**暴露中取走一部分**（时刻/质量/用途）并**复测样层厚度**；可勾选**样盘局部结露**。
+3. **封口复核**：封口即按规则复核；有 error 的会话置为 `invalid`，**不得从中取子样**。
+4. **独立子样重复物性试验**：封口通过后称取**独立编号子样**（不复用原样编号、禁止回掺），从会话卡片发起松装/振实或漏斗流动；向导全程显示“暴露后子样”溯源条。
+
+**关键隔离约束（不得用暴露后结果回写原样）：**
+
+- 暴露子样测次带 `provenance(exposureSessionId, subSampleId, subCode)`，记录页用“暴露后子样”蓝标单独标注；
+- 汇总均值分两组：原样均值与暴露后有效测次分别计数，**暴露后结果绝不并入原样均值**；
+- 暴露子样**不套用**“开封暴露 10 min”时限（其暴露量由会话曲线/时长受控证明），但必须满足子样最小装样量；
+- 已判废/未封口会话不能创建子样，质量不足子样不能开始装粉。
+
+### 暴露分支判废/提示代码
+
+| 代码 | 触发条件 |
+| --- | --- |
+| `LOGGER_NOT_STARTED` / `LOGGER_LATE_START` | 记录器未启动，或晚于敞口开始 >2 min（前段无曲线，整会话判废） |
+| `LOGGER_SLIGHT_LATE` | 晚启动在 2 min 容差内（仅提示留档） |
+| `ENV_CURVE_*`（HEAD_GAP/GAP/EMPTY/TAIL_GAP） | 曲线缺首段、采样中断 >5 min、空曲线、封口前缺采样 |
+| `DISH_CONDENSATION` | 样盘局部结露：整盘不具代表性，判废废弃、重新暴露 |
+| `LAYER_THICKNESS_*`（MISSING/UNVERIFIED/INCONSISTENT） | 缺初始厚度；取走后未复测；取走后厚度反增 |
+| `WITHDRAWAL_OUTSIDE_WINDOW` / `WITHDRAWAL_MASS_BALANCE` | 取走时刻不在敞口窗口；取走合计超过初始粉量（衡算为负） |
+| `SUBSAMPLE_MASS_SHORT` / `SUBSAMPLE_MASS_MISSING` | 暴露子样质量不足（松装/振实 <50 g、流动 <100 g）或未称取 |
+| `FUNNEL_NOT_CLEANED` | 两种奶粉共用未清洁漏斗（上一样品/产品不同且未勾清洁确认） |
+
+## 异常测试场景（共 10 个）
+
+顶部“异常场景自检”一键注入演示数据；前 5 个直达复核页，后 5 个属于高湿暴露分支/共用漏斗：
 
 | 场景 | 触发 | 判废代码 |
 | --- | --- | --- |
@@ -50,8 +79,13 @@ npm run typecheck  # tsc --noEmit
 | 振实计数中断 | 463/500 且脉冲中断 | `TAP_SHORT` + `TAP_INTERRUPTED` |
 | 漏斗口粘粉 | 出口粘粉、残留 3.4 g | `OUTLET_STICKING` |
 | 等待期间吸湿 | 开封暴露 > 方法限值 10 min | `MOISTURE_EXPOSURE(_FLOW)` |
+| **记录器晚启动** | 记录器晚于敞口 8 min，前段无曲线 | `LOGGER_LATE_START`（会话判废） |
+| **样盘局部结露** | 盘壁/粉面水珠 | `DISH_CONDENSATION`（整盘判废） |
+| **暴露中取走一部分** | 取走 40 g 已登记、厚度已复测（会话仍可用） | 演示合规登记；漏登/衡算为负才判废 |
+| **暴露子样质量不足** | 独立子样仅 60 g < 流动 100 g | `SUBSAMPLE_MASS_SHORT` |
+| **共用未清洁漏斗** | 全脂 A 用完未清洁即测脱脂 B | `FUNNEL_NOT_CLEANED` |
 
-判废记录可“留档”但**不计算结果、不计入有效测次**；只有实验员勾选“有效测次”且无 error 时才计入汇总。
+判废记录可“留档”但**不计算结果、不计入有效测次**；只有实验员勾选“有效测次”且无 error 时才计入对应分组（原样 / 暴露后子样）的汇总。
 
 ## 已批准公式（`Q/MPS-PHY-01 v1.0`）
 
@@ -66,11 +100,11 @@ npm run typecheck  # tsc --noEmit
 
 ```
 src/
-  domain/      类型、种子（方法/量筒台账）、公式、复核规则（纯函数，可测）
-  db/          IndexedDB 键值持久化（无网络）
+  domain/      类型、种子（方法/量筒台账）、公式、复核规则、高湿暴露规则（纯函数，可测）
+  db/          IndexedDB 键值持久化（无网络；含旧版本字段迁移）
   device/      Web Serial 管理器 + 天平/计数器 ASCII 协议解析 + 模拟设备
-  state/       Qwik store：向导动作、aliquot 阶段锁定、保存判废
-  components/  Qwik 组件：步骤向导、设备栏、SVG 量筒/漏斗、记录与场景面板
+  state/       Qwik store：向导动作、aliquot 阶段锁定、暴露会话/子样、漏斗清洁、保存判废
+  components/  Qwik 组件：步骤向导、高湿暴露页、设备栏、SVG 量筒/漏斗、记录与场景面板
 ```
 
 ### 串口协议

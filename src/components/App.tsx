@@ -10,6 +10,7 @@ import { DeviceBar } from './DeviceBar';
 import { Stepper } from './Stepper';
 import { ScenarioPanel } from './ScenarioPanel';
 import { RecordsPanel } from './RecordsPanel';
+import { ExposurePanel } from './ExposurePanel';
 import {
   StepFill,
   StepFlow,
@@ -23,7 +24,7 @@ import { clearLocalData } from '../db/idb';
 export const App = component$(() => {
   const store = useContext(LabStoreContext);
   const devices = useContext(DeviceContext);
-  const tab = useSignal<'wizard' | 'records'>('wizard');
+  const tab = useSignal<'wizard' | 'exposure' | 'records'>('wizard');
   const ready = useSignal(false);
   const tick = useSignal(0);
 
@@ -50,12 +51,12 @@ export const App = component$(() => {
         <div>
           <h1>奶粉粉体物性试验台</h1>
           <p class="subtitle">
-            松装密度 · 振实密度 · 漏斗流动时间 ｜ 纯前端无服务器，样品/方法版本/测次仅保存在本机 IndexedDB
+            松装密度 · 振实密度 · 漏斗流动时间 · 短时高湿暴露分支 ｜ 纯前端无服务器，样品/方法版本/测次仅保存在本机 IndexedDB
           </p>
         </div>
         <div class="scope">
           <strong>范围声明</strong>
-          <span>按已批准方法读数、复核与计算；不评价冲调体验，不推荐生产参数。</span>
+          <span>按已批准方法读数、复核与计算；不评价冲调体验，不推荐生产参数；暴露后结果不回写原样。</span>
         </div>
       </header>
 
@@ -64,6 +65,9 @@ export const App = component$(() => {
       <div class="tabs">
         <button class={tab.value === 'wizard' ? 'tab on' : 'tab'} onClick$={() => (tab.value = 'wizard')}>
           分步试验
+        </button>
+        <button class={tab.value === 'exposure' ? 'tab on' : 'tab'} onClick$={() => (tab.value = 'exposure')}>
+          短时高湿暴露分支
         </button>
         <button class={tab.value === 'records' ? 'tab on' : 'tab'} onClick$={() => (tab.value = 'records')}>
           本机记录与汇总
@@ -86,9 +90,17 @@ export const App = component$(() => {
             {step === 'flow' && <StepFlow />}
             {step === 'review' && <StepReview />}
           </main>
-          <ScenarioPanel />
+          <ScenarioPanel
+            onInjected={(kind) => {
+              if (kind === 'exposure') tab.value = 'exposure';
+              if (kind === 'wizard-flow') tab.value = 'wizard';
+              if (kind === 'wizard-bulk') tab.value = 'wizard';
+            }}
+          />
         </>
       )}
+
+      {tab.value === 'exposure' && <ExposurePanel />}
 
       {tab.value === 'records' && (
         <main class="content">
