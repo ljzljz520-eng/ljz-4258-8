@@ -25,7 +25,14 @@ export function validateBulk(
 
   if (d.tareMassG == null) err('TARE_MISSING', '缺少量筒皮重读数，需先称空筒皮重。');
   if (d.grossMassG == null) err('GROSS_MISSING', '缺少量筒+粉毛重读数。');
-  if (d.looseVolumeMl == null) err('LOOSE_VOL_MISSING', '缺少松装体积读数。');
+  if (d.looseVolumeMl == null) {
+    err('LOOSE_VOL_MISSING', '缺少松装体积读数。');
+  } else if (d.looseVolumeMl <= 0) {
+    err(
+      'LOOSE_VOL_INVALID',
+      `松装体积读数 ${d.looseVolumeMl} mL 非正：体积读数必须为正，该读数不得保存为有效测次。`,
+    );
+  }
 
   // 测试点：量筒皮重错用——本次实测皮重与台账皮重不符
   if (d.tareMassG != null) {
@@ -44,6 +51,18 @@ export function validateBulk(
   }
 
   // 测试点：粉面倾斜——周向最大/最小读数差超阈值
+  if (d.looseVolumeMaxMl != null && d.looseVolumeMaxMl <= 0) {
+    err(
+      'LOOSE_MAX_INVALID',
+      `周向最高读数 ${d.looseVolumeMaxMl} mL 非正：体积读数必须为正，请重新读数。`,
+    );
+  }
+  if (d.looseVolumeMinMl != null && d.looseVolumeMinMl <= 0) {
+    err(
+      'LOOSE_MIN_INVALID',
+      `周向最低读数 ${d.looseVolumeMinMl} mL 非正：体积读数必须为正，请重新读数。`,
+    );
+  }
   if (d.looseVolumeMaxMl != null && d.looseVolumeMinMl != null) {
     const tilt = d.looseVolumeMaxMl - d.looseVolumeMinMl;
     if (tilt < 0) err('TILT_REVERSED', '粉面最大读数小于最小读数，记录有误。');
@@ -82,6 +101,11 @@ export function validateBulk(
   }
   if (d.tappedVolumeMl == null) {
     err('TAPPED_VOL_MISSING', '缺少振实后体积读数。');
+  } else if (d.tappedVolumeMl <= 0) {
+    err(
+      'TAPPED_VOL_INVALID',
+      `振实体积读数 ${d.tappedVolumeMl} mL 非正：体积读数必须为正，该读数不得保存为有效测次。`,
+    );
   } else if (
     d.looseVolumeMl != null &&
     d.tappedVolumeMl > d.looseVolumeMl + 0.0001

@@ -92,6 +92,38 @@ describe('五个指定测试场景', () => {
     expect(hasFatal(validateFlow(method, goodFlow()))).toBe(false);
   });
 
+  it('负的/零体积读数判废，不得作为有效测次', () => {
+    const negLoose = goodBulk();
+    negLoose.looseVolumeMl = -5;
+    const looseIssues = validateBulk(method, cyl, negLoose);
+    expect(looseIssues.map((i) => i.code)).toContain('LOOSE_VOL_INVALID');
+    expect(hasFatal(looseIssues)).toBe(true);
+
+    const zeroLoose = goodBulk();
+    zeroLoose.looseVolumeMl = 0;
+    expect(validateBulk(method, cyl, zeroLoose).map((i) => i.code)).toContain(
+      'LOOSE_VOL_INVALID',
+    );
+
+    const negTapped = goodBulk();
+    negTapped.tappedVolumeMl = -1;
+    const tappedIssues = validateBulk(method, cyl, negTapped);
+    expect(tappedIssues.map((i) => i.code)).toContain('TAPPED_VOL_INVALID');
+    expect(hasFatal(tappedIssues)).toBe(true);
+
+    const negMin = goodBulk();
+    negMin.looseVolumeMinMl = -2;
+    expect(validateBulk(method, cyl, negMin).map((i) => i.code)).toContain(
+      'LOOSE_MIN_INVALID',
+    );
+
+    const negMax = goodBulk();
+    negMax.looseVolumeMaxMl = -0.5;
+    expect(validateBulk(method, cyl, negMax).map((i) => i.code)).toContain(
+      'LOOSE_MAX_INVALID',
+    );
+  });
+
   it('勾选有效测次但存在判废项时给出警示且不应计入', () => {
     const d = goodBulk();
     d.tareMassG = 58.4;

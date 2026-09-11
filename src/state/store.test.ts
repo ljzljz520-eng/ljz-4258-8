@@ -139,4 +139,50 @@ describe('aliquot 阶段锁定：振实后不能冒充初始松装样', () => {
     expect(store.state.runs.length).toBe(1);
     expect(store.state.runs[0].flags.acceptedReplicate).toBe(true);
   });
+
+  it('负的体积读数不能保存为有效测次', () => {
+    const { store } = makeStore();
+    fillBulk(store);
+    store.setBulkField('looseVolumeMl', -5);
+    store.gotoStep('tap');
+    store.setTap(500, false);
+    store.setBulkField('tappedVolumeMl', 68);
+    store.setFlag('bulk', 'acceptedReplicate', true);
+    store.gotoStep('review');
+    const codes = store.review().map((i) => i.code);
+    expect(codes).toContain('LOOSE_VOL_INVALID');
+    // 勾了有效测次 + 有判废项：拒绝保存
+    const rejected = store.saveRun();
+    expect(rejected.ok).toBe(false);
+    expect(store.state.runs.length).toBe(0);
+    // 负的振实体积同样判废
+    store.setBulkField('looseVolumeMl', 78);
+    store.setBulkField('tappedVolumeMl', -1);
+    expect(store.review().map((i) => i.code)).toContain('TAPPED_VOL_INVALID');
+    expect(store.saveRun().ok).toBe(false);
+    expect(store.state.runs.length).toBe(0);
+  });
+
+  it('锁定装粉量后不可改写称量值', () => {
+    const { store } = makeStore();
+    store.startWizard('flow', store.state.samples[0].id);
+    store.startFill('funnel');
+    // 锁定前可录入/修改
+    store.setFlowField('chargeMassG', 99.5);
+    expect(store.startFlowLoad(100)).toBeNull();
+    // 锁定后改写被拒，称量值保持锁定值
+    store.setFlowField('chargeMassG', 55);
+    let d = store.state.wizard.draft!;
+    expect(d.kind === 'flow' && d.chargeMassG).toBe(100);
+    expect(store.state.wizard.uiError).toMatch(/已锁定/);
+    // 流完后同样不可改写
+    expect(store.markFlowDischarged(18.6)).toBeNull();
+    store.setFlowField('chargeMassG', 60);
+    d = store.state.wizard.draft!;
+    expect(d.kind === 'flow' && d.chargeMassG).toBe(100);
+    // 锁定不影响其他字段（如残留质量）的录入
+    store.setFlowField('residueMassG', 0.2);
+    d = store.state.wizard.draft!;
+    expect(d.kind === 'flow' && d.residueMassG).toBe(0.2);
+  });
 });

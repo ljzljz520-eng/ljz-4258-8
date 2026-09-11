@@ -365,6 +365,16 @@ export function createLabStore(initial: LabState, deps: StoreDeps = {}): LabStor
     setFlowField(key, value) {
       const d = flowDraft();
       if (!d) return;
+      // 装粉量经“称取并锁定”后随 aliquot 阶段锁定，禁止再改写称量值
+      if (key === 'chargeMassG') {
+        const a = getAliquot();
+        if (a && a.phase !== 'fresh') {
+          fail(
+            '装粉量已锁定（该 aliquot 已装粉/已流出），不得改写称量值；如需更改请丢弃当前 aliquot 另取新样',
+          );
+          return;
+        }
+      }
       (d as unknown as Record<string, unknown>)[key] = value;
       save();
     },
@@ -407,7 +417,14 @@ export function createLabStore(initial: LabState, deps: StoreDeps = {}): LabStor
           d.grossMassG != null && d.tareMassG != null
             ? d.grossMassG - d.tareMassG
             : null;
-        const computable = !fatal && net != null && net > 0 && d.looseVolumeMl != null;
+        const computable =
+          !fatal &&
+          net != null &&
+          net > 0 &&
+          d.looseVolumeMl != null &&
+          d.looseVolumeMl > 0 &&
+          d.tappedVolumeMl != null &&
+          d.tappedVolumeMl > 0;
         if (d.flags.acceptedReplicate && !computable) {
           return { ok: false, issues, fatal };
         }

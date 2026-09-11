@@ -584,6 +584,9 @@ export const StepFlow = component$(() => {
 
   if (!d || d.kind !== 'flow' || !method) return <p class="muted">无流动草案</p>;
 
+  // 装粉量经“称取并锁定”后随 aliquot 阶段锁定，禁止再改写称量值
+  const chargeLocked = aliquot != null && aliquot.phase !== 'fresh';
+
   const fstate = d.outletSticking
     ? 'stuck'
     : aliquot?.phase === 'flow_discharged'
@@ -605,11 +608,13 @@ export const StepFlow = component$(() => {
               type="number"
               step="0.1"
               value={d.chargeMassG ?? ''}
+              disabled={chargeLocked}
               onInput$={(e) => store.setFlowField('chargeMassG', num(e.target))}
             />
           </label>
           <button
             class="btn"
+            disabled={chargeLocked}
             onClick$={() => {
               const r = devices.balance.state.stable;
               if (!r) {
@@ -623,6 +628,11 @@ export const StepFlow = component$(() => {
             称取并锁定“已装粉”
           </button>
         </div>
+        {chargeLocked && (
+          <p class="muted small">
+            装粉量已锁定（aliquot 已装粉/已流出），不得改写；如需更改请丢弃当前 aliquot 另取新样。
+          </p>
+        )}
 
         <div class="counter-box">
           <div class="counter-num">

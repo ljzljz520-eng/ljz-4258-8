@@ -13,7 +13,7 @@ npm run dev        # 开发（http://localhost:5173）
 npm run build      # 纯 CSR 静态产物到 dist/
 npx vite preview   # 注意：Qwik CSR 模式下 preview 会因插件空路径报错；
                    # 直接用静态服务器即可： npx serve dist 或 python3 -m http.server -d dist
-npm run test       # 24 个单元测试（公式/判废场景/串口解析/阶段锁定）
+npm run test       # 27 个单元测试（公式/判废场景/串口解析/阶段锁定）
 npm run typecheck  # tsc --noEmit
 ```
 
