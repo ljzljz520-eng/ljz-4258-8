@@ -1,0 +1,22 @@
+{
+  "name": "milk-powder-physical-lab",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "奶粉粉体物性（松装/振实密度、漏斗流动时间）离线试验应用",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview --host",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@builder.io/qwik": "^1.20.0"
+  },
+  "devDependencies": {
+    "typescript": "~5.6.3",
+    "vite": "^5.4.21",
+    "vitest": "^2.1.9"
+  }
+}
